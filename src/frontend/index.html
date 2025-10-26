@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Mini RAG Chatbot v3 - $(date)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px; /* Increased for two columns */
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px); /* Fixed height - no scroll */
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 15px 25px; /* Reduced padding */
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 1.8em; /* Reduced font size */
+            margin-bottom: 5px; /* Reduced margin */
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 0.9em; /* Reduced font size */
+            opacity: 0.9;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-right: 2px solid #e9ecef;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px; /* Reduced padding */
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px; /* Reduced margin */
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message.bot {
+            text-align: left;
+        }
+
+        .message-bubble {
+            display: inline-block;
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.bot .message-bubble {
+            background: white;
+            color: #333;
+            border: 1px solid #e1e5e9;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .loading-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .typing-dots {
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4facfe;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .sources {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #4facfe;
+        }
+
+        .sources h4 {
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .source-item {
+            background: white;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 6px;
+            font-size: 13px;
+            border-left: 3px solid #4facfe;
+        }
+
+        .score-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .chat-input {
+            padding: 15px 20px; /* Reduced padding */
+            background: white;
+            border-top: 2px solid #4facfe;
+            flex-shrink: 0;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            /* Input field is now at the very bottom of the container */
+        }
+
+        .input-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 18px; /* Reduced padding */
+            border: 2px solid #4facfe;
+            border-radius: 25px;
+            font-size: 15px; /* Reduced font size */
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+            color: #333;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .send-btn {
+            padding: 10px 20px; /* Reduced padding */
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 15px; /* Reduced font size */
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 70px; /* Reduced width */
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .faq-sidebar {
+            width: 320px; /* Reduced width */
+            background: #f8f9fa;
+            border-left: 2px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .faq-section {
+            flex: 1;
+            padding: 15px; /* Reduced padding */
+            overflow-y: auto;
+        }
+
+        .faq-title {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .faq-item {
+            background: white;
+            margin: 8px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .faq-question {
+            padding: 12px 16px;
+            background: #4facfe;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        .faq-question:hover {
+            background: #3d8bfe;
+        }
+
+        .faq-answer {
+            padding: 12px 16px;
+            background: white;
+            color: #666;
+            line-height: 1.4;
+            font-size: 14px;
+            display: none;
+        }
+
+        .faq-answer.show {
+            display: block;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .welcome-message {
+            text-align: center;
+            color: #666;
+            padding: 40px 20px;
+            font-style: italic;
+        }
+
+        .input-hint {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            .chat-container {
+                border-right: none;
+                border-bottom: 2px solid #e9ecef;
+            }
+            .faq-sidebar {
+                width: 100%;
+                border-left: none;
+                border-top: 2px solid #e9ecef;
+                max-height: 300px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                height: 100vh;
+                border-radius: 0;
+            }
+            
+            .message-bubble {
+                max-width: 85%;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Mini RAG Chatbot</h1>
+            <p>Задайте въпрос и ще получите отговор с източници</p>
+        </div>
+
+        <div class="main-content">
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        Здравейте! Задайте въпрос и ще ви помогна с информация от нашата база данни.
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-sidebar">
+                <div class="faq-section">
+                    <h3 class="faq-title">❓ Задай въпрос</h3>
+                    <div style="text-align: center; color: #666; font-size: 14px; margin-bottom: 15px; font-style: italic;">
+                        💡 Или изберете от често задаваните въпроси по-долу
+                    </div>
+                    <div id="faqList">
+                        <div class="loading-message">Зареждане на FAQ...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input field moved to bottom -->
+        <div class="chat-input">
+            <div class="input-hint">
+                💡 Задайте въпрос тук (НАЙ-ДОЛУ!)
+            </div>
+            <form class="input-form" id="chatForm">
+                <input 
+                    type="text" 
+                    class="input-field" 
+                    id="messageInput" 
+                    placeholder="💬 Задайте въпрос на български... (напр. 'Как се плаща?', 'Кога ще дойде пратката?')"
+                    required
+                    autocomplete="off"
+                >
+                <button type="submit" class="send-btn" id="sendBtn">
+                    Изпрати
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        // DOM elements
+        const chatForm = document.getElementById('chatForm');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const chatMessages = document.getElementById('chatMessages');
+        const faqList = document.getElementById('faqList');
+
+        // Add message to chat
+        function addMessage(content, isUser = false, showTime = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+            
+            const time = showTime ? new Date().toLocaleTimeString('bg-BG', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            }) : '';
+            
+            messageDiv.innerHTML = `
+                <div class="message-bubble">
+                    ${content}
+                </div>
+                ${showTime ? `<div class="message-time">${time}</div>` : ''}
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        // Show typing indicator
+        function showTyping() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message bot';
+            typingDiv.id = 'typingIndicator';
+            typingDiv.innerHTML = `
+                <div class="message-bubble">
+                    <div class="loading-message">
+                        Търсене
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Hide typing indicator
+        function hideTyping() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        // Load FAQ data
+        async function loadFAQ() {
+            try {
+                const response = await fetch(`${API_BASE}/faq`);
+                const faqData = await response.json();
+                
+                if (faqData.length > 0) {
+                    // Shuffle FAQ array and take only 6 items
+                    const shuffledFaqs = shuffleArray([...faqData]).slice(0, 6);
+                    
+                    faqList.innerHTML = shuffledFaqs.map(item => `
+                        <div class="faq-item">
+                            <div class="faq-question" onclick="toggleFAQ(this)">
+                                ${item.question}
+                            </div>
+                            <div class="faq-answer">
+                                ${item.answer}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    faqList.innerHTML = '<div class="loading-message">Няма налични FAQ</div>';
+                }
+            } catch (error) {
+                console.error('FAQ load error:', error);
+                faqList.innerHTML = '<div class="error">Грешка при зареждане на FAQ</div>';
+            }
+        }
+
+        // Shuffle array function
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        // Toggle FAQ answer
+        function toggleFAQ(element) {
+            const answer = element.nextElementSibling;
+            const isShowing = answer.classList.contains('show');
+            
+            // Close all other FAQ items
+            document.querySelectorAll('.faq-answer.show').forEach(item => {
+                item.classList.remove('show');
+            });
+            
+            // Toggle current item
+            if (!isShowing) {
+                answer.classList.add('show');
+            }
+        }
+
+        // Search function
+        async function searchQuestion(question) {
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Търсене...';
+            
+            // Show typing indicator
+            showTyping();
+
+            try {
+                const response = await fetch(`${API_BASE}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        q: question,
+                        k: 5
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Hide typing indicator
+                hideTyping();
+                
+                // Display bot response
+                displayBotResponse(data);
+                
+                // Refresh FAQ with new random selection (debounced)
+                setTimeout(() => loadFAQ(), 100);
+
+            } catch (error) {
+                console.error('Search error:', error);
+                hideTyping();
+                addMessage(`
+                    <div class="error">
+                        Грешка при свързване с чатбота. Моля, опитайте отново.
+                    </div>
+                `);
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Изпрати';
+            }
+        }
+
+        // Display bot response
+        function displayBotResponse(data) {
+            const sourcesHtml = data.sources.map(source => `
+                <div class="source-item">
+                    <strong>${source.source_table}:${source.source_id}</strong> - ${source.title}
+                    <br><small>Релевантност: ${(source.similarity * 100).toFixed(1)}%</small>
+                </div>
+            `).join('');
+
+            const responseContent = `
+                <div class="score-badge">
+                    Резултат: ${data.score}/100
+                </div>
+                <div style="margin-bottom: 15px;">
+                    ${data.answer}
+                </div>
+                <div class="sources">
+                    <h4>Източници:</h4>
+                    ${sourcesHtml}
+                </div>
+            `;
+
+            addMessage(responseContent);
+        }
+
+        // Event listeners
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = messageInput.value.trim();
+            if (question) {
+                // Add user message
+                addMessage(question, true);
+                
+                // Clear input
+                messageInput.value = '';
+                
+                // Search for answer
+                await searchQuestion(question);
+            }
+        });
+
+        // Focus input on page load
+        messageInput.focus();
+
+        // Load FAQ on page load
+        loadFAQ();
+    </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+---
+alwaysApply: true
+---
+
+Ще изграждаме MINI RAG CHATBOT 
+
+Mini-rag-pgvector-qwen2
+Mini RAG Chatbot with LoRA Fine-Tuning and Post-Training Integration
+Overview
+
+This project implements a Mini RAG chatbot (Retrieval-Augmented Generation) with optional LoRA fine-tuning, built using Python and PostgreSQL, integrated with Ollama for model inference and serving.
+
+Technologies:
+
+Language Model: Qwen 2.5 (1.5B–3B) or Phi-3 Mini 3.8B
+
+Embeddings: BGE-small / BGE-M3
+
+Vector Index: pgvector
+
+Database: PostgreSQL
+
+Containerization: Docker & Docker Compose
+
+Fine-tuning: LoRA (via mlx_lm)
+
+Conversion: GGUF for Ollama compatibility
+
+---
+
+## Структура на Проекта
+
+### Цел
+Минимален, но реалистичен прототип на чатбот, който:
+- Отговаря на въпроси върху предоставени данни (RAG подход)
+- Показва източници (идентификатори/заглавия)
+- Изчислява score (0–100) за увереност/релевантност
+- При score < 80 връща съобщение: „Това не е в моята компетенция"
+
+### Данни
+- SQL seed: ecom_rag_seed_v2.sql
+- Включва: политики, FAQ, описания/продукти
+
+### Компоненти за Реализиране
+
+#### 1) Подготовка на Данните
+- Скрипт за зареждане и нормализация на съдържанието (политики, FAQ, описания/продукти)
+- Подготовка на корпус за извличане
+- Конкатениране на заглавие + тяло
+- Лека сегментация на дълги текстове
+
+#### 2) Извличане (Индекс)
+- Изграждане на индекс и функция „намери top-k релевантни откъси"
+- Векторен индекс: embeddings (BGE-small/BGE-M3) + pgvector
+- Алтернативи: BM25 или хибриден подход
+
+#### 3) Чатбот Интерфейс
+- Прост интерфейс: въпрос → отговор
+- Отговорът съдържа:
+  * Кратък текстов отговор
+  * Източници (напр. policy:2, faq:5, product:42)
+  * Score (0–100)
+
+#### 4) Логика за Score
+- Изчисляване на score на база извличането
+- Дефолтен праг: 80
+  * Score ≥ 80: генерирай отговор + цитирай източници
+  * Score < 80: върни „Това не е в моята компетенция" (без халюцинации)
+- Формула/калибрация описана в README
+
+#### 5) Опционално Дообучаване (LoRA)
+- Тестване на малко дообучаване върху Q&A от FAQ/политики
+- Инструкционно дообучаване с LoRA/QLoRA
+- Демонстрация на процеса
+
+### Примерни Модели
+- LLM: Phi-3 Mini 3.8B / Qwen 2.5 (1.5B–3B) / Llama 3.2 (3B)
+- Embeddings: BGE-small / BGE-M3 + FAISS/pgvector
+
+### README Изисквания
+- Как се стартира (1–3 стъпки/команди)
+- Какви данни и модел са използвани
+- Как работи извличането и как се изчислява score
+- Примери за заявка и отговор (вкл. score и източници)
+
+### Архитектура
+```
+mini-rag-chatbot/
+├── data/                      # Данни и SQL seeds
+│   └── ecom_rag_seed_v2.sql
+├── src/                       # Основен код
+│   ├── data_preparation/      # Подготовка на данни
+│   ├── indexing/              # Векторно индексиране
+│   ├── retrieval/             # Извличане на релевантни откъси
+│   ├── chatbot/               # Чатбот логика
+│   ├── scoring/               # Score калкулация
+│   └── fine_tuning/           # LoRA дообучаване (опционално)
+├── models/                    # Модели и embeddings
+├── docker/                    # Docker конфигурации
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── tests/                     # Тестове
+├── config/                    # Конфигурационни файлове
+├── requirements.txt           # Python dependencies
+└── README.md                  # Документация
+```
+
+### Технически Изисквания
+- Python 3.10+
+- PostgreSQL с pgvector extension
+- Docker & Docker Compose
+- Ollama за model serving
+- mlx_lm за LoRA fine-tuning (опционално)
+
+### Поведение на Системата
+1. Потребител задава въпрос
+2. Система извлича top-k релевантни откъси от индекса
+3. Изчислява score на база релевантност
+4. Ако score ≥ 80: генерира отговор с LLM + цитира източници
+5. Ако score < 80: връща „Това не е в моята компетенция"
+6. Никога не халюцинира информация извън предоставените данни

@@ -1,0 +1,58 @@
+# Core Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+psycopg2-binary==2.9.9
+asyncpg==0.29.0
+sqlalchemy==2.0.25
+pgvector==0.2.4
+
+# Embeddings & ML
+sentence-transformers==2.3.1
+torch==2.1.2
+transformers==4.37.2
+accelerate==0.26.1
+
+# Vector Search & Retrieval
+numpy==1.26.3
+scikit-learn==1.4.0
+
+# LLM Integration
+openai==1.10.0
+requests==2.31.0
+
+# Fine-tuning (LoRA)
+peft==0.8.2
+bitsandbytes==0.42.0
+datasets==2.16.1
+trl==0.7.10
+
+# MLX (for Apple Silicon / alternative)
+# mlx==0.3.0
+# mlx-lm==0.1.0
+
+# Data Processing
+pandas==2.2.0
+sqlparse==0.4.4
+
+# Utilities
+python-dotenv==1.0.0
+tenacity==8.2.3
+httpx==0.26.0
+simplemma==1.1.2  # Bulgarian lemmatization and morphological analysis
+
+# Logging & Monitoring
+loguru==0.7.2
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# Development
+black==24.1.1
+ruff==0.1.14
+

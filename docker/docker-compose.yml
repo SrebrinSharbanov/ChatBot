@@ -1,0 +1,168 @@
+version: '3.9'
+
+services:
+  # PostgreSQL с pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mini-rag-postgres
+    environment:
+      POSTGRES_DB: rag_chatbot
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpassword
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      # ВАЖНО: Всички volumes са на D:\ диск
+      - D:/mini-rag-chatbot/data/postgres:/var/lib/postgresql/data
+      - D:/mini-rag-chatbot/data/sample_seed.sql:/docker-entrypoint-initdb.d/sample_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d rag_chatbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mini-rag-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      # Ollama модели на D:\ диск
+      - D:/mini-rag-chatbot/data/ollama:/root/.ollama
+    environment:
+      # Performance optimizations (CPU optimized for Windows Docker Desktop)
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_LOADED_MODELS: 1
+      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_FLASH_ATTENTION: false  # Disabled for Windows Docker Desktop
+      OLLAMA_NUM_THREADS: 8  # Increased for better CPU performance
+      OLLAMA_DEBUG: INFO
+      # GPU support (if available)
+      OLLAMA_GPU_LAYERS: 20  # Enable GPU layers for GeForce 940MX
+      OLLAMA_HOST: 0.0.0.0:11434
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - rag-network
+    # healthcheck:
+    #   test: ["CMD-SHELL", "nc -z localhost 11434 || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+  # Ollama Warmup Service
+  ollama-warmup:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: mini-rag-ollama-warmup
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: qwen2.5:1.5b
+    depends_on:
+      - ollama
+    networks:
+      - rag-network
+    command: ["python", "scripts/warmup_ollama.py", "--host", "http://ollama:11434", "--model", "qwen2.5:1.5b", "--wait", "15"]
+    restart: "no"
+
+  # RAG Chatbot Application
+  rag-chatbot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: mini-rag-chatbot
+    environment:
+      # Database configuration (individual components)
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      POSTGRES_DB: rag_chatbot
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpassword
+      
+      # Ollama configuration (Docker service)
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: qwen2.5:1.5b
+      
+      # Embedding model (multilingual with Bulgarian support)
+      EMBEDDING_MODEL: BAAI/bge-m3
+      
+      # Application settings
+      SCORE_THRESHOLD: 80
+      TOP_K_RETRIEVAL: 3
+      
+      # GPU settings (disabled due to driver issue)
+      CUDA_VISIBLE_DEVICES: ""
+      EMBEDDING_DEVICE: cpu
+      
+      # Paths (mapped to D:\ диск)
+      MODELS_CACHE_DIR: /app/models
+      EMBEDDINGS_CACHE_DIR: /app/embeddings
+    ports:
+      - "8000:8000"
+    volumes:
+      # Споделени директории на D:\ диск
+      - D:/mini-rag-chatbot/models:/app/models
+      - D:/mini-rag-chatbot/data/embeddings:/app/embeddings
+      - D:/mini-rag-chatbot/logs:/app/logs
+      - D:/mini-rag-chatbot/config:/app/config
+    depends_on:
+      - postgres
+      - ollama
+      - ollama-warmup
+    networks:
+      - rag-network
+    restart: unless-stopped
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # LoRA Training service
+  lora-train:
+    build: .
+    profiles: ["lora"]
+    command: python scripts/lora_training_bulgarian.py
+    volumes:
+      - D:/mini-rag-chatbot/models:/app/models
+      - D:/mini-rag-chatbot/out:/app/out
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - rag-network
+
+  # Adminer за database management (optional)
+  adminer:
+    image: adminer
+    container_name: mini-rag-adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+networks:
+  rag-network:
+    driver: bridge
+
+# Note: Named volumes не се използват, защото всичко е директно на D:\
+# Това дава пълен контрол над локацията на данните
+
