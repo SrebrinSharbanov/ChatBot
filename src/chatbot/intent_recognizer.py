@@ -85,12 +85,42 @@ class IntentRecognizer:
                 "Email за поддръжка",
                 "Адрес на магазина"
             ],
+            "working_hours": [
+                "Работите ли в неделя?",
+                "Кога работите?",
+                "Работно време",
+                "Отворени ли сте в събота?",
+                "До колко часа работите?",
+                "От колко часа отваряте?",
+                "Работите ли в почивни дни?",
+                "График на работа"
+            ],
             "products": [
-                "Какви продукти предлагате?",
+                "Какви продукти имате?",
+                "Предлагате ли лаптопи?",
+                "Имате ли телефони?",
+                "Продавате ли часовници?",
+                "Какво имате в каталога?",
+                "Покажете ми продуктите",
+                "Имате ли таблети?",
+                "Предлагате ли компютри?",
+                "Какви стоки имате?",
                 "Каталог с продукти",
                 "Налични стоки",
                 "Нови продукти",
                 "Популярни продукти"
+            ],
+            "promotions": [
+                "Имате ли промоции?",
+                "Какви са акциите?",
+                "Имате ли промо код?",
+                "Има ли отстъпки?",
+                "Има ли намаления?",
+                "Имате ли ваучери?",
+                "Има ли специални оферти?",
+                "Промоционални кодове",
+                "Отстъпки за студенти",
+                "Корпоративни отстъпки"
             ]
         }
         
@@ -102,7 +132,9 @@ class IntentRecognizer:
             "warranty": "гаранция, сервиз, ремонт, поддръжка, гаранционен срок",
             "shipping": "доставка, куриер, транспорт, разходи за доставка",
             "contact": "телефон, email, адрес, връзка, поддръжка",
-            "products": "каталог, продукти, стоки, асортимент, налични"
+            "products": "каталог, продукти, стоки, асортимент, налични",
+            "promotions": "промоции, акции, отстъпки, намаления, промо код, ваучери, оферти",
+            "working_hours": "работно време, график, понеделник, вторник, сряда, четвъртък, петък, събота, неделя, почивни дни"
         }
         
         # Canonical aliases for query normalization (expanded with conversational forms)
@@ -173,6 +205,17 @@ class IntentRecognizer:
             "телефонен номер": "контактна информация",
             "адрес": "контактна информация",
             "контактна информация": "контактна информация",
+            
+            # Working hours aliases
+            "работно време": "график на работа",
+            "работите ли": "график на работа",
+            "отворени ли сте": "график на работа",
+            "кога работите": "график на работа",
+            "до колко часа": "график на работа",
+            "от колко часа": "график на работа",
+            "работите ли в неделя": "график на работа",
+            "работите ли в събота": "график на работа",
+            "почивни дни": "график на работа",
             
             # Product aliases (телефон като продукт)
             "телефон": "каталог продукти",
@@ -252,7 +295,9 @@ class IntentRecognizer:
             Lemmatized text
         """
         try:
-            lemmatized_words = simplemma.lemmatize(text, lang="bg")
+            # Tokenize text into words first
+            words = text.split()
+            lemmatized_words = [simplemma.lemmatize(word, lang="bg") for word in words]
             return " ".join(lemmatized_words)
         except Exception as e:
             logger.warning(f"Failed to lemmatize Bulgarian text: {e}")
@@ -359,10 +404,15 @@ class IntentRecognizer:
             max_score_idx = np.argmax(similarities)
             max_score = similarities[0, max_score_idx].item()
             
+            # Debug: Log similarity for each intent
+            logger.debug(f"Intent '{intent}': max similarity = {max_score:.3f}")
+            
             if max_score > best_score:
                 best_score = max_score
                 best_intent = intent
                 best_canonical = self.canonical_queries[intent][max_score_idx]
+        
+        logger.debug(f"Best intent: '{best_intent}' with score {best_score:.3f}")
         
         # Only rewrite if confidence is high enough (further lowered for Bulgarian)
         if best_score > 0.45:  # Further lowered threshold for Bulgarian models
@@ -405,6 +455,46 @@ class IntentRecognizer:
         
         return query
     
+    def _check_product_exists_in_db(self, product_type: str) -> bool:
+        """
+        BUSINESS_RULE: Check if the extracted product type actually exists in database.
+        
+        Args:
+            product_type: The product type extracted from user query
+            
+        Returns:
+            True if product exists in database, False otherwise
+        """
+        try:
+            from src.database.db import get_db_connection
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Check if any products match the extracted product type
+            sql = """
+                SELECT COUNT(*) 
+                FROM products 
+                WHERE LOWER(name) LIKE %s 
+                   OR LOWER(description) LIKE %s 
+                   OR LOWER(category) LIKE %s
+            """
+            
+            product_lower = product_type.lower()
+            cursor.execute(sql, (f'%{product_lower}%', f'%{product_lower}%', f'%{product_lower}%'))
+            count = cursor.fetchone()[0]
+            
+            cursor.close()
+            conn.close()
+            
+            exists = count > 0
+            logger.info(f"Product '{product_type}' exists in DB: {exists} (found {count} matches)")
+            return exists
+            
+        except Exception as e:
+            logger.error(f"Error checking product existence: {e}")
+            return False
+    
     def add_context_boost(self, query: str, intent: str) -> str:
         """
         BUSINESS_RULE: Добавя контекстно подсилване към заявката.
@@ -437,21 +527,20 @@ class IntentRecognizer:
         original_query = query.strip()
         query_lower = original_query.lower()
         
-        # Step -1: Auto-correct Bulgarian spelling before regex/intent analysis
-        query_lower = self._auto_correct_bulgarian(query_lower)
-        
-        # Step 0: Lemmatize Bulgarian words to base forms
-        query_lower = self._lemmatize_bulgarian(query_lower)
-
-        # FAST-PATH: Explicit products routing with product_type extraction
-        match = re.search(
+        # FAST-PATH FIRST: Check for products before any processing
+        # This ensures we catch product queries before lemmatization changes the text
+        products_match = re.search(
             r"\b(?:предлагате ли|имате ли|продавате ли|налични ли са|има ли|купя|поръчам|вземете ли)\s+([a-zA-Zа-яА-Я0-9\s-]+?)\b(?:\?|$)",
             query_lower
         )
-        if match:
-            product_type = match.group(1).strip()
-            if any(kw in product_type for kw in [
-                "лаптоп", "ноутбук", "компютър", "телефон", "смартфон", "gsm", "часовник", "таблет", "слушалки"
+        if products_match:
+            product_type = products_match.group(1).strip()
+            # Only classify as product if the word after the verb is a real product
+            if any(kw in product_type.lower() for kw in [
+                "лаптоп", "ноутбук", "компютър", "телефон", "смартфон", "смартфони", "gsm", 
+                "часовник", "таблет", "слушалки", "мишка", "клавиатура", "монитор",
+                "принтер", "скенер", "камера", "аксесоари", "периферия", "смартфон",
+                "iphone", "samsung", "dell", "hp", "lenovo", "asus", "acer"
             ]):
                 result = {
                     "original_query": original_query,
@@ -462,11 +551,11 @@ class IntentRecognizer:
                     "product_filter": product_type,
                     "expanded_terms": []
                 }
-                logger.info(f"Regex fast-path (product='{product_type}') for '{original_query}'")
+                logger.info(f"✓ Regex fast-path (product='{product_type}') for '{original_query}'")
                 return result
         
         # Fallback regex for general products queries
-        if re.search(r"\b(какви продукти( имате)?|какво предлагате|каталог( продукти)?|продукти|стоки)\b", query_lower):
+        if re.search(r"\b(какви продукти( имате)?|каталог( продукти)?|каталога|продукти|стоки)\b", query_lower):
             result = {
                 "original_query": original_query,
                 "processed_query": original_query,
@@ -476,8 +565,30 @@ class IntentRecognizer:
                 "product_filter": None,
                 "expanded_terms": []
             }
-            logger.info(f"Regex fast-path (general products) for '{original_query}'")
+            logger.info(f"✓ Regex fast-path (general products) for '{original_query}'")
             return result
+        
+        # FAST-PATH: Working hours queries (days of week)
+        if re.search(r"\b(работите ли|отворени ли сте|работно време|график|кога работите|до колко часа|от колко часа)\b", query_lower):
+            # Check for specific days
+            days_match = re.search(r"\b(понеделник|вторник|сряда|четвъртък|петък|събота|неделя|почивни дни|празници)\b", query_lower)
+            result = {
+                "original_query": original_query,
+                "processed_query": original_query,
+                "intent": "working_hours",
+                "confidence": 0.95,
+                "query_type": "regex_fastpath",
+                "day_filter": days_match.group(1) if days_match else None,
+                "expanded_terms": []
+            }
+            logger.info(f"✓ Regex fast-path (working hours) for '{original_query}'")
+            return result
+        
+        # Step -1: Auto-correct Bulgarian spelling before regex/intent analysis
+        query_lower = self._auto_correct_bulgarian(query_lower)
+        
+        # Step 0: Lemmatize Bulgarian words to base forms
+        query_lower = self._lemmatize_bulgarian(query_lower)
 
         # Step 0: Normalize query with aliases
         normalized_query = self._normalize_aliases(original_query)

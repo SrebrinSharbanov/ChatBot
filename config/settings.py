@@ -58,10 +58,10 @@ class LLMConfig(BaseModel):
 
 class RAGConfig(BaseModel):
     """RAG configuration"""
-    top_k: int = 3  # Reduced for faster retrieval
+    top_k: int = 5  # Increased for better retrieval coverage
     score_threshold: int = 80  # Keep original threshold
     max_context_length: int = 1500  # Reduced for faster processing
-    min_similarity: float = 0.2
+    min_similarity: float = 0.1  # Lowered for better recall with BGE-M3
     max_similarity: float = 0.8
 
 

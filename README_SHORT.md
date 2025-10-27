@@ -4,8 +4,8 @@
 
 ```bash
 # 1. Клониране
-git clone <repository-url>
-cd mini-rag-chatbot
+git clone https://github.com/SrebrinSharbanov/ChatBot.git
+cd ChatBot
 
 # 2. Стартиране с Docker
 cd docker
@@ -16,6 +16,13 @@ docker exec -it mini-rag-chatbot python scripts/prepare_data.py
 docker exec -it mini-rag-chatbot python scripts/build_index.py
 
 # 4. Готово! Отвори http://localhost:8000/api/frontend
+
+# 5. Тестване (опционално)
+# Разширени юнит тестове (150+ тест случая)
+docker exec -it mini-rag-chatbot python unit_test_chatbot.py
+
+# Тестване на конкретна категория
+docker exec -it mini-rag-chatbot python unit_test_chatbot.py --category "продукти"
 ```
 
 ## ✨ Основни Функции
@@ -47,6 +54,24 @@ docker exec -it mini-rag-chatbot python scripts/build_index.py
 ### 🇧🇬 **Български Post-Processing**
 - Автоматично изглаждане на граматика
 - Естествени отговори на български език
+
+## 🧪 Тестване
+
+### **📊 Разширени Юнит Тестове**
+- **150+ тест случая** в 12 категории
+- **Автоматично изчисляване** на статистики
+- **Гъвкаво тестване** по категории
+
+```bash
+# Пълно тестване
+python unit_test_chatbot.py
+
+# Конкретна категория
+python unit_test_chatbot.py --category "продукти"
+
+# Списък категории
+python unit_test_chatbot.py --list-categories
+```
 
 ## 🎯 Примери на Работа
 
@@ -114,5 +139,9 @@ Score: 15/100
 - Responsive дизайн
 
 ---
+
+## 🔗 GitHub Repository
+
+**Репозиторий**: [https://github.com/SrebrinSharbanov/ChatBot](https://github.com/SrebrinSharbanov/ChatBot)
 
 **🎯 Готово за production!** Просто стартирай Docker и започни да задаваш въпроси! 🚀

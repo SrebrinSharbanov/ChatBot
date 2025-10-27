@@ -155,6 +155,51 @@ class RAGChatbot:
         
         return response
 
+    def _handle_product_not_found(self, query: str, intent_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        BUSINESS_RULE: Handle cases where user asks for a product that doesn't exist in database.
+        
+        Args:
+            query: User's original query
+            intent_result: Intent recognition result
+            
+        Returns:
+            Response indicating product is not available
+        """
+        try:
+            product_filter = intent_result.get('product_filter', 'този продукт')
+            
+            # Create a helpful response message
+            answer = f"Към момента не предлагаме {product_filter}. "
+            answer += "Можете да разгледате нашия каталог с налични продукти или да се свържете с нас за повече информация."
+            
+            logger.info(f"Product not found response for '{query}' (product: {product_filter})")
+            
+            return {
+                "query": query,
+                "answer": answer,
+                "score": 90,  # High score because we understood the intent correctly
+                "sources": [],
+                "confidence": "high",
+                "intent": "product_not_found",
+                "intent_confidence": intent_result['confidence'],
+                "processed_query": intent_result['processed_query'],
+                "product_filter": product_filter
+            }
+            
+        except Exception as e:
+            logger.error(f"Error handling product not found: {e}")
+            return {
+                "query": query,
+                "answer": "Това не е в моята компетенция.",
+                "score": 0,
+                "sources": [],
+                "confidence": "low",
+                "intent": "product_not_found",
+                "intent_confidence": 0.5,
+                "processed_query": query
+            }
+
     def _handle_products_query(self, query: str, intent_result: Dict[str, Any]) -> Dict[str, Any]:
         """
         BUSINESS_RULE: Intelligent products handler with hybrid retrieval.
@@ -238,9 +283,17 @@ class RAGChatbot:
             
             # Step 4: Check if products found
             if not products:
-                no_products_message = "В момента не откривам продукти от този тип."
+                # Extract product name from query for better message
+                product_filter = intent_result.get('product_filter', None)
+                if product_filter:
+                    no_products_message = f"Към момента не предлагаме {product_filter}."
+                else:
+                    no_products_message = "В момента не откривам продукти от този тип."
+                
                 if keywords:
                     no_products_message += f" Търсихме: {', '.join(keywords)}"
+                
+                no_products_message += " Можете да разгледате нашия каталог с налични продукти или да се свържете с нас за повече информация."
                 
                 logger.warning(f"No products found for keywords: {keywords}")
                 
@@ -250,9 +303,9 @@ class RAGChatbot:
                 return {
                     "query": query,
                     "answer": no_products_message,
-                    "score": 0,
+                    "score": 90,  # High score because we understood the intent correctly
                     "sources": [],
-                    "confidence": "low",
+                    "confidence": "high",
                     "intent": "products",
                     "intent_confidence": intent_result['confidence'],
                     "processed_query": intent_result['processed_query']
